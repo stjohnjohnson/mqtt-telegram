@@ -1,0 +1,13 @@
+---
+mqtt:
+    # Specify your MQTT Broker's hostname or IP address here
+    host: localhost
+
+telegram:
+    # Token to talk to Telegram
+    token: INSERT_TOKEN_HERE
+
+# Where to send events to
+topics:
+    sample/topic:
+        - INSERT_CHAT_ID
