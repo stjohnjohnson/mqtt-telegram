@@ -1,6 +1,6 @@
 {
   "name": "mqtt-telegram",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Transfers Images from MQTT to Telegram",
   "main": "server.js",
   "bin": {
