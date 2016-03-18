@@ -48,7 +48,9 @@ function parseMQTTMessage (topic, message) {
     }
     config.topics[topic].forEach(function (chat_id) {
         winston.info('Forwarding image from %s to %s', topic, chat_id);
-        bot.sendPhoto(chat_id, message);
+        bot.sendPhoto(chat_id, message, {
+            disable_notification: true
+        });
     });
 }
 
