@@ -21,7 +21,8 @@ var config,
     broker,
     bot,
     queues = {},
-    history = {};
+    cache = {},
+    active = {};
 
 // Show Debug logs in console
 winston.level = 'debug';
@@ -60,37 +61,44 @@ function parseMQTTMessage (topic, message) {
 function parseMQTTImage (topic, message, next) {
     winston.info('Incoming image from MQTT %s', topic);
 
+    var fileA = tempfile('.jpg'),
+        fileB = tempfile('.jpg'),
+        chats = config.topics[topic],
+        firstEvent = !active[topic];
+
+    // Got a clear event, disable active mode and exit
     if (message.length === 0) {
+        active[topic] = false;
         return next();
     }
 
-    var fileA = tempfile('.jpg'),
-        fileB = tempfile('.jpg'),
-        chats = config.topics[topic];
-
-    fs.writeFileSync(fileA, history[topic]);
+    fs.writeFileSync(fileA, cache[topic]);
     fs.writeFileSync(fileB, message);
     gm.compare(fileA, fileB, function (err, isEqual, difference) {
+        // Show two decimal places
+        difference = Math.round((difference * 10000) || 10000) / 100;
+
         fs.unlinkSync(fileA);
         fs.unlinkSync(fileB);
 
-        history[topic] = message;
+        // Cache new image
+        cache[topic] = message;
 
         // Skip if under a 1% difference
-        if (!err && difference < 0.01) {
+        if (difference < 1) {
+            winston.info('Skipping image due to only %d% difference', difference);
             return next();
         }
 
+        // Mark as active
+        active[topic] = true;
+
         chats.forEach(function (chat_id) {
             winston.info('Forwarding image from %s to %s', topic, chat_id);
-            if (message.length === 0) {
-                bot.sendMessage(chat_id, 'Motion complete');
-            } else {
-                bot.sendPhoto(chat_id, message, {
-                    disable_notification: true,
-                    caption: (difference * 100) + '% change'
-                });
-            }
+            bot.sendPhoto(chat_id, message, {
+                disable_notification: !firstEvent,
+                caption: difference + '% change'
+            });
         });
         next();
     });
