@@ -7,6 +7,9 @@ var winston = require('winston'),
     yaml = require('js-yaml'),
     async = require('async'),
     mqtt = require('mqtt'),
+    fs = require('fs'),
+    gm = require('gm'),
+    tempfile = require('tempfile'),
     TelegramBotAPI = require('node-telegram-bot-api');
 
 var CONFIG_DIR = process.env.CONFIG_DIR || process.cwd(),
@@ -16,7 +19,9 @@ var CONFIG_DIR = process.env.CONFIG_DIR || process.cwd(),
 
 var config,
     broker,
-    bot;
+    bot,
+    queues = {},
+    history = {};
 
 // Show Debug logs in console
 winston.level = 'debug';
@@ -43,14 +48,51 @@ function loadConfiguration () {
 function parseMQTTMessage (topic, message) {
     winston.info('Incoming message from MQTT %s', topic);
 
+    queues[topic].push(message);
+}
+
+/**
+ * Parse incoming image from MQTT
+ * @method parseMQTTImage
+ * @param  {String} topic   Topic channel the event came from
+ * @param  {Stream} message Contents of the image
+ */
+function parseMQTTImage (topic, message, next) {
+    winston.info('Incoming image from MQTT %s', topic);
+
     if (message.length === 0) {
         return;
     }
-    config.topics[topic].forEach(function (chat_id) {
-        winston.info('Forwarding image from %s to %s', topic, chat_id);
-        bot.sendPhoto(chat_id, message, {
-            disable_notification: true
+
+    var fileA = tempfile('.jpg'),
+        fileB = tempfile('.jpg'),
+        chats = config.topics[topic];
+
+    fs.writeFileSync(fileA, history[topic]);
+    fs.writeFileSync(fileB, message);
+    gm.compare(fileA, fileB, function (err, isEqual, difference) {
+        fs.unlinkSync(fileA);
+        fs.unlinkSync(fileB);
+
+        history[topic] = message;
+
+        // Skip if under a 1% difference
+        if (!err && difference < 0.01) {
+            return next();
+        }
+
+        chats.forEach(function (chat_id) {
+            winston.info('Forwarding image from %s to %s', topic, chat_id);
+            if (message.length === 0) {
+                bot.sendMessage(chat_id, 'Motion complete');
+            } else {
+                bot.sendPhoto(chat_id, message, {
+                    disable_notification: true,
+                    caption: (difference * 100) + '% change'
+                });
+            }
         });
+        next();
     });
 }
 
@@ -83,9 +125,14 @@ async.series([
         .catch(next);
     },
     function beginListening (next) {
-        winston.info('Listening to events');
+        var topics = Object.keys(config.topics);
+        winston.info('Listening to %d events', topics.length);
 
-        broker.subscribe(Object.keys(config.topics));
+        topics.forEach(function (topic) {
+            queues[topic] = async.queue(parseMQTTImage.bind(null, topic), 1);
+        });
+
+        broker.subscribe(topics);
         process.nextTick(next);
     }
 ], function (error) {

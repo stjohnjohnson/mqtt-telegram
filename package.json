@@ -29,9 +29,11 @@
   "homepage": "https://github.com/stjohnjohnson/mqtt-telegram",
   "dependencies": {
     "async": "^1.5.2",
+    "gm": "^1.21.1",
     "js-yaml": "^3.4.3",
     "mqtt": "^1.7.0",
     "node-telegram-bot-api": "^0.21.1",
+    "tempfile": "^1.1.1",
     "winston": "^2.0.0"
   },
   "devDependencies": {
