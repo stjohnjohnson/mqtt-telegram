@@ -61,7 +61,7 @@ function parseMQTTImage (topic, message, next) {
     winston.info('Incoming image from MQTT %s', topic);
 
     if (message.length === 0) {
-        return;
+        return next();
     }
 
     var fileA = tempfile('.jpg'),
